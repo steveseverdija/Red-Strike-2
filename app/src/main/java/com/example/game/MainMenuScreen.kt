@@ -14,6 +14,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.R
 import com.example.ui.theme.*
 
@@ -106,9 +109,39 @@ fun MainMenuScreen(onStartGame: (Int, String, String) -> Unit) {
                 }
             }
             MenuScreenState.SETTINGS -> {
+                var volume by remember { mutableStateOf(50f) }
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(24.dp)) {
                     Text("---[ SETTINGS ]---", fontSize = 24.sp, color = TextPrimary, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                    Text("Volume: [======    ]", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                    
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Text("> Volume: ${volume.toInt()}%", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                        
+                        val maxBars = 20
+                        val activeBars = ((volume / 100f) * maxBars).toInt()
+                        val asciiSlider = "[" + "█".repeat(activeBars) + "-".repeat(maxBars - activeBars) + "]"
+                        
+                        Text(
+                            text = asciiSlider,
+                            color = AccentRed,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 20.sp,
+                            modifier = Modifier
+                                .padding(vertical = 16.dp)
+                                .pointerInput(Unit) {
+                                    detectTapGestures { offset ->
+                                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                                        volume = fraction * 100f
+                                    }
+                                }
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, _ ->
+                                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                                        volume = fraction * 100f
+                                    }
+                                }
+                        )
+                    }
+
                     MenuButton("[ BACK ]") { screenState = MenuScreenState.MAIN }
                 }
             }

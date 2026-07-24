@@ -10,11 +10,14 @@ echo "Building APKs for version v$VERSION_NAME..."
 
 # Run gradle build
 gradle clean :app:assembleRelease :app:assembleDebug
-
 if [ $? -ne 0 ]; then
     echo "Gradle build failed! Aborting export."
     exit 1
 fi
+
+# Remove previous github_build_* folders
+echo "Cleaning up previous build folders..."
+rm -rf github_build_*
 
 # Create output directory
 OUT_DIR="github_build_v$VERSION_NAME"
