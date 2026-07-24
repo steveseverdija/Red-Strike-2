@@ -11,14 +11,14 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk = 36
+  compileSdk = 35
 
   defaultConfig {
     applicationId = "com.aistudio.redstrike.xyp3rq.addbaf"
     minSdk = 24
-    targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    targetSdk = 35
+    versionCode = 2
+    versionName = "1.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -30,12 +30,16 @@ android {
       storePassword = System.getenv("STORE_PASSWORD") ?: "android"
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+      enableV1Signing = true
+      enableV2Signing = true
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
+      enableV1Signing = true
+      enableV2Signing = true
     }
   }
 
