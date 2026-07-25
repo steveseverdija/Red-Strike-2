@@ -153,6 +153,7 @@ class GameViewModel : ViewModel() {
         _gameState.update { state ->
             // Process production queue
             var newCredits = state.credits
+            var newEnemyCredits = state.enemyCredits
             var newQueue = state.productionQueue.toMutableList()
             val unitsToSpawn = mutableListOf<UnitType>()
             val updatedTerrainMap = state.terrainMap.toMutableMap()
@@ -293,7 +294,7 @@ class GameViewModel : ViewModel() {
                     newParticles.add(Particle(position = nozzlePos, velocity = pVelocity, color = 0xFFFDE047, size = 4f))
                 }
 
-                if (unit.type == UnitType.HARVESTER && !unit.isEnemy && unit.targetPosition == null && unit.path.isEmpty()) {
+                if (unit.type == UnitType.HARVESTER && unit.targetPosition == null && unit.path.isEmpty()) {
                     var closestDistSq = Float.MAX_VALUE
                     var closestTree: Pair<Int, Int>? = null
                     
@@ -313,6 +314,17 @@ class GameViewModel : ViewModel() {
                     if (closestTree != null) {
                         val target = Offset(closestTree.first * 60f + 30f, closestTree.second * 60f + 30f)
                         val p = findPath(unit.position, target, updatedTerrainMap, updatedBuildings, state.mapSize, unit.type.isFlying)
+                        val nextTarget = p.firstOrNull()
+                        val remainingPath = if (p.isNotEmpty()) p.drop(1) else emptyList()
+                        unit = unit.copy(targetPosition = nextTarget, path = remainingPath)
+                    }
+                } else if (unit.type != UnitType.HARVESTER && unit.type != UnitType.BUILDER && unit.targetPosition == null && unit.path.isEmpty()) {
+                    // Auto-aggro enemies in proximity if idle
+                    val aggroRadius = 250f
+                    val aggroSq = aggroRadius * aggroRadius
+                    val targetToChase = updatedUnits.firstOrNull { it.isEnemy != unit.isEnemy && it.health > 0 && distSq(it.position, unit.position) <= aggroSq && !((unit.type == UnitType.TANK || unit.type == UnitType.L_A_V) && it.type.isFlying) }
+                    if (targetToChase != null) {
+                        val p = findPath(unit.position, targetToChase.position, updatedTerrainMap, updatedBuildings, state.mapSize, unit.type.isFlying)
                         val nextTarget = p.firstOrNull()
                         val remainingPath = if (p.isNotEmpty()) p.drop(1) else emptyList()
                         unit = unit.copy(targetPosition = nextTarget, path = remainingPath)
@@ -399,7 +411,7 @@ class GameViewModel : ViewModel() {
                     unit = unit.copy(rotation = newRotation, turretRotation = newTurretRotation)
                 }
                 
-                if (unit.type == UnitType.HARVESTER && !unit.isEnemy) {
+                if (unit.type == UnitType.HARVESTER) {
                     val tx = (unit.position.x / 60f).toInt()
                     val ty = (unit.position.y / 60f).toInt()
                     var harvested = false
@@ -412,7 +424,7 @@ class GameViewModel : ViewModel() {
                                 val centerY = (ty + dy) * 60f + 30f
                                 if (distSq(unit.position, Offset(centerX, centerY)) < 60f * 60f) {
                                     updatedTerrainMap.remove(key)
-                                    newCredits += 50
+                                    if (unit.isEnemy) newEnemyCredits += 50 else newCredits += 50
                                     harvested = true
                                     
                                     newParticles.add(Particle(position = Offset(centerX, centerY), velocity = Offset(0f, -2f), color = 0xFF22C55E, size = 6f))
@@ -502,6 +514,7 @@ class GameViewModel : ViewModel() {
                 particles = updatedParticles,
                 terrainMap = updatedTerrainMap,
                 credits = newCredits,
+                enemyCredits = newEnemyCredits,
                 enemiesDestroyed = enemiesDestroyed,
                 timeElapsedMs = timeElapsedMs,
                 unitsBuilt = unitsBuilt,
@@ -513,25 +526,61 @@ class GameViewModel : ViewModel() {
     private fun updateEnemyAI() {
         val state = _gameState.value
         val enemyUnits = state.units.filter { it.isEnemy }
+        val enemyBuildings = state.buildings.filter { it.isEnemy }
+        val maxUnits = if (state.difficulty == 0) 10 else if (state.difficulty == 1) 25 else 50
         
-        if (state.enemyCredits >= UnitType.L_A_V.cost && enemyUnits.size < 20) {
-            _gameState.update { it.copy(enemyCredits = it.enemyCredits - UnitType.L_A_V.cost) }
-            val spawnPos = state.buildings.firstOrNull { it.isEnemy && it.type == BuildingType.FACTORY }?.position ?: Offset(state.mapSize * 60f - 300f, state.mapSize * 60f - 300f)
-            spawnUnit(UnitType.L_A_V, spawnPos + Offset(0f, 60f), true)
+        // Try building things occasionally
+        if (Random.nextFloat() < 0.05f) {
+            val hasFactory = enemyBuildings.any { it.type == BuildingType.FACTORY }
+            val numHarvesters = enemyUnits.count { it.type == UnitType.HARVESTER }
+            val commandPos = enemyBuildings.firstOrNull { it.type == BuildingType.COMMAND }?.position ?: Offset(state.mapSize * 60f - 300f, state.mapSize * 60f - 300f)
+            
+            // Build Factory if Normal/Hard and don't have one
+            if (state.difficulty > 0 && !hasFactory && state.enemyCredits >= BuildingType.FACTORY.cost) {
+                _gameState.update { it.copy(enemyCredits = it.enemyCredits - BuildingType.FACTORY.cost) }
+                spawnBuilding(BuildingType.FACTORY, commandPos + Offset(-120f, 0f), true)
+            }
+            // Build Harvesters (up to 1 on easy, 2 on normal, 3 on hard)
+            else if (numHarvesters < state.difficulty + 1 && state.enemyCredits >= UnitType.HARVESTER.cost) {
+                _gameState.update { it.copy(enemyCredits = it.enemyCredits - UnitType.HARVESTER.cost) }
+                spawnUnit(UnitType.HARVESTER, commandPos + Offset(0f, 100f), true)
+            }
+            // Build attack units
+            else if (enemyUnits.size < maxUnits) {
+                val availableUnits = mutableListOf<UnitType>()
+                availableUnits.add(UnitType.SF_SOLDIER)
+                if (hasFactory) {
+                    availableUnits.add(UnitType.L_A_V)
+                    if (state.difficulty > 0) availableUnits.add(UnitType.DRONE)
+                    if (state.difficulty > 1) availableUnits.add(UnitType.TANK)
+                }
+                val typeToBuild = availableUnits.random()
+                if (state.enemyCredits >= typeToBuild.cost) {
+                    _gameState.update { it.copy(enemyCredits = it.enemyCredits - typeToBuild.cost) }
+                    val spawnPos = if (hasFactory && (typeToBuild == UnitType.L_A_V || typeToBuild == UnitType.TANK || typeToBuild == UnitType.DRONE)) {
+                        enemyBuildings.first { it.type == BuildingType.FACTORY }.position
+                    } else {
+                        commandPos
+                    }
+                    spawnUnit(typeToBuild, spawnPos + Offset(0f, 60f), true)
+                }
+            }
         }
         
-        if (enemyUnits.isNotEmpty() && Random.nextFloat() < 0.1f) {
+        // Attack logic
+        val attackProbability = if (state.difficulty == 0) 0.02f else if (state.difficulty == 1) 0.05f else 0.1f
+        if (enemyUnits.isNotEmpty() && Random.nextFloat() < attackProbability) {
             val playerTarget = state.buildings.firstOrNull { !it.isEnemy }?.position 
                 ?: state.units.firstOrNull { !it.isEnemy }?.position
                 ?: Offset(300f, 300f)
                 
             _gameState.update { s ->
                 val newUnits = s.units.map { 
-                    if (it.isEnemy && it.targetPosition == null) {
+                    if (it.isEnemy && it.type != UnitType.HARVESTER && it.targetPosition == null) {
                         val offsetX = Random.nextFloat() * 200f - 100f
                         val offsetY = Random.nextFloat() * 200f - 100f
                         it.copy(targetPosition = playerTarget + Offset(offsetX, offsetY))
-                    } else it 
+                    } else it
                 }
                 s.copy(units = newUnits)
             }
@@ -656,16 +705,30 @@ class GameViewModel : ViewModel() {
     
     private fun commandSelectedToMove(target: Offset) {
         _gameState.update { state ->
-            val updated = state.units.map { 
-                if (it.isSelected && !it.isEnemy) {
-                    val offsetX = Random.nextFloat() * 40f - 20f
-                    val offsetY = Random.nextFloat() * 40f - 20f
+            val selectedUnits = state.units.filter { it.isSelected && !it.isEnemy }
+            val numSelected = selectedUnits.size
+            if (numSelected == 0) return@update state
+            
+            val cols = kotlin.math.ceil(kotlin.math.sqrt(numSelected.toDouble())).toInt()
+            val spacing = 40f
+            
+            var index = 0
+            val updated = state.units.map { unit ->
+                if (unit.isSelected && !unit.isEnemy) {
+                    val row = index / cols
+                    val col = index % cols
+                    
+                    val offsetX = (col - (cols - 1) / 2f) * spacing
+                    val offsetY = (row - (numSelected / cols) / 2f) * spacing
+                    
                     val t = target + Offset(offsetX, offsetY)
-                    val p = findPath(it.position, t, state.terrainMap, state.buildings, state.mapSize, it.type.isFlying)
+                    val p = findPath(unit.position, t, state.terrainMap, state.buildings, state.mapSize, unit.type.isFlying)
                     val nextTarget = p.firstOrNull()
                     val remainingPath = if (p.isNotEmpty()) p.drop(1) else emptyList()
-                    it.copy(targetPosition = nextTarget, path = remainingPath)
-                } else it
+                    
+                    index++
+                    unit.copy(targetPosition = nextTarget, path = remainingPath)
+                } else unit
             }
             state.copy(units = updated)
         }
