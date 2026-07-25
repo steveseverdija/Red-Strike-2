@@ -28,11 +28,23 @@ class GameViewModel : ViewModel() {
             for (y in 0..39) {
                 val rand = Random.nextFloat()
                 if (rand < 0.05f) {
-                    val ascii = if (Random.nextBoolean()) " /\\ \n/  \\\n/    \\" else " /\\ \n/  \\"
+                    val mountains = listOf(
+                        "   ██████╗   \n ██╔════██╗ \n██╔╝    ╚██╗\n██║      ██║\n╚═╝      ╚═╝",
+                        "  ████████╗ \n ██╔════██╗\n██╔╝    ╚██╗\n██║      ██║\n╚═╝      ╚═╝",
+                        "    ████╗   \n  ██╔══██╗  \n ██╔╝  ╚██╗ \n██╔╝    ╚██╗\n╚═╝      ╚═╝",
+                        "  ████╗██╗  \n ██╔═██╔██╗ \n██╔╝ ╚═╝╚██╗\n██║      ██║\n╚═╝      ╚═╝"
+                    )
+                    val ascii = mountains.random()
                     newTerrainMap[Pair(x, y)] = TerrainTile(TerrainType.MOUNTAIN, ascii, 0xFF4B5563) // dark gray
                 } else if (rand < 0.12f) {
-                    val ascii = if (Random.nextBoolean()) " (  ) \n(    )\n  ||  " else " () \n )( \n || "
-                    newTerrainMap[Pair(x, y)] = TerrainTile(TerrainType.TREE, ascii, 0xFF4D7C0F) // dark olive
+                    val trees = listOf(
+                        "  ████╗  \n ██╔═██╗ \n ██║ ██║ \n ╚████╔╝ \n  ╚═══╝  ",
+                        "  ████╗  \n██╔══██╗\n╚██╗██╔╝\n  ████║  \n  ╚═══╝  ",
+                        "   ██╗   \n ██╔██╗ \n██╔╝╚██╗\n╚═████╔╝\n  ╚═══╝  ",
+                        "  ████╗  \n ██╔═██╗ \n██╔╝ ╚██╗\n╚██████╔╝\n ╚═════╝ "
+                    )
+                    val ascii = trees.random()
+                    newTerrainMap[Pair(x, y)] = TerrainTile(TerrainType.TREE, ascii, 0xFF064E3B) // dark green
                 }
             }
         }
@@ -251,7 +263,7 @@ class GameViewModel : ViewModel() {
                     newParticles.add(Particle(position = nozzlePos, velocity = pVelocity, color = 0xFFFDE047, size = 4f))
                 }
 
-                if (unit.type == UnitType.HARVESTER && !unit.isEnemy && unit.targetPosition == null) {
+                if (unit.type == UnitType.HARVESTER && !unit.isEnemy && unit.targetPosition == null && unit.path.isEmpty()) {
                     var closestDistSq = Float.MAX_VALUE
                     var closestTree: Pair<Int, Int>? = null
                     
@@ -269,7 +281,11 @@ class GameViewModel : ViewModel() {
                         }
                     }
                     if (closestTree != null) {
-                        unit = unit.copy(targetPosition = Offset(closestTree.first * 60f + 30f, closestTree.second * 60f + 30f))
+                        val target = Offset(closestTree.first * 60f + 30f, closestTree.second * 60f + 30f)
+                        val p = findPath(unit.position, target, updatedTerrainMap, updatedBuildings)
+                        val nextTarget = p.firstOrNull()
+                        val remainingPath = if (p.isNotEmpty()) p.drop(1) else emptyList()
+                        unit = unit.copy(targetPosition = nextTarget, path = remainingPath)
                     }
                 }
 
@@ -279,7 +295,8 @@ class GameViewModel : ViewModel() {
                     val dy = target.y - unit.position.y
                     val distanceSq = dx * dx + dy * dy
                     
-                    if (distanceSq > unit.type.speed * unit.type.speed) {
+                    val reachThresholdSq = if (unit.path.isNotEmpty()) 400f else (unit.type.speed * unit.type.speed)
+                    if (distanceSq > reachThresholdSq) {
                         val angle = atan2(dy, dx)
                         newRotation = Math.toDegrees(angle.toDouble()).toFloat()
                         if (targetEnemy == null && targetBuilding == null) {
@@ -296,22 +313,57 @@ class GameViewModel : ViewModel() {
                         newPosX = newPosX.coerceIn(0f, mapMax)
                         newPosY = newPosY.coerceIn(0f, mapMax)
                         
+                        val wasCollidingBuilding = isCollidingWithBuilding(unit.position, unit.type.radius, updatedBuildings)
+                        val wasCollidingMountain = isCollidingWithMountain(unit.position, unit.type.radius, updatedTerrainMap)
+
                         val collidesWithBuilding = isCollidingWithBuilding(Offset(newPosX, newPosY), unit.type.radius, updatedBuildings)
                         val collidesWithMountain = isCollidingWithMountain(Offset(newPosX, newPosY), unit.type.radius, updatedTerrainMap)
                         
-                        if (collidesWithBuilding || collidesWithMountain) {
-                            if (!isCollidingWithBuilding(Offset(newPosX, unit.position.y), unit.type.radius, updatedBuildings) && !isCollidingWithMountain(Offset(newPosX, unit.position.y), unit.type.radius, updatedTerrainMap)) {
+                        val hitBuilding = collidesWithBuilding && !wasCollidingBuilding
+                        val hitMountain = collidesWithMountain && !wasCollidingMountain
+
+                        if (hitBuilding || hitMountain) {
+                            val newXHitBuilding = isCollidingWithBuilding(Offset(newPosX, unit.position.y), unit.type.radius, updatedBuildings) && !wasCollidingBuilding
+                            val newXHitMountain = isCollidingWithMountain(Offset(newPosX, unit.position.y), unit.type.radius, updatedTerrainMap) && !wasCollidingMountain
+                            val newYHitBuilding = isCollidingWithBuilding(Offset(unit.position.x, newPosY), unit.type.radius, updatedBuildings) && !wasCollidingBuilding
+                            val newYHitMountain = isCollidingWithMountain(Offset(unit.position.x, newPosY), unit.type.radius, updatedTerrainMap) && !wasCollidingMountain
+
+                            if (!newXHitBuilding && !newXHitMountain) {
                                 newPosY = unit.position.y
-                            } else if (!isCollidingWithBuilding(Offset(unit.position.x, newPosY), unit.type.radius, updatedBuildings) && !isCollidingWithMountain(Offset(unit.position.x, newPosY), unit.type.radius, updatedTerrainMap)) {
+                            } else if (!newYHitBuilding && !newYHitMountain) {
                                 newPosX = unit.position.x
                             } else {
                                 newPosX = unit.position.x
                                 newPosY = unit.position.y
                             }
                         }
-                        unit = unit.copy(position = Offset(newPosX, newPosY), rotation = newRotation, turretRotation = newTurretRotation)
+                        
+                        var currentStuckTime = unit.stuckTimeMs
+                        if (newPosX == unit.position.x && newPosY == unit.position.y) {
+                            currentStuckTime += deltaMs
+                            val nextTarget = unit.path.firstOrNull()
+                            val remainingPath = if (unit.path.isNotEmpty()) unit.path.drop(1) else emptyList()
+                            if (currentStuckTime > 1000L && unit.type == UnitType.HARVESTER && !unit.isEnemy) {
+                                val randomOffsetX = kotlin.random.Random.nextFloat() * 200f - 100f
+                                val randomOffsetY = kotlin.random.Random.nextFloat() * 200f - 100f
+                                val escapeTarget = Offset((unit.position.x + randomOffsetX).coerceIn(0f, 2400f), (unit.position.y + randomOffsetY).coerceIn(0f, 2400f))
+                                unit = unit.copy(targetPosition = escapeTarget, path = emptyList(), stuckTimeMs = 0L, rotation = newRotation, turretRotation = newTurretRotation)
+                            } else if (currentStuckTime > 500L) {
+                                if (nextTarget == null) {
+                                    unit = unit.copy(targetPosition = null, path = emptyList(), stuckTimeMs = 0L, rotation = newRotation, turretRotation = newTurretRotation)
+                                } else {
+                                    unit = unit.copy(targetPosition = nextTarget, path = remainingPath, stuckTimeMs = 0L, rotation = newRotation, turretRotation = newTurretRotation)
+                                }
+                            } else {
+                                unit = unit.copy(stuckTimeMs = currentStuckTime, rotation = newRotation, turretRotation = newTurretRotation)
+                            }
+                        } else {
+                            unit = unit.copy(position = Offset(newPosX, newPosY), stuckTimeMs = 0L, rotation = newRotation, turretRotation = newTurretRotation)
+                        }
                     } else {
-                        unit = unit.copy(position = target, targetPosition = null, rotation = newRotation, turretRotation = newTurretRotation)
+                        val nextTarget = unit.path.firstOrNull()
+                        val remainingPath = if (unit.path.isNotEmpty()) unit.path.drop(1) else emptyList()
+                        unit = unit.copy(position = if (unit.path.isEmpty()) target else unit.position, targetPosition = nextTarget, path = remainingPath, rotation = newRotation, turretRotation = newTurretRotation)
                     }
                 } else {
                     unit = unit.copy(rotation = newRotation, turretRotation = newTurretRotation)
@@ -365,10 +417,10 @@ class GameViewModel : ViewModel() {
                         var newPos2X = u2.position.x + pushX
                         var newPos2Y = u2.position.y + pushY
                         
-                        if (!isCollidingWithBuilding(Offset(newPos1X, newPos1Y), u1.type.radius, updatedBuildings)) {
+                        if (!isCollidingWithBuilding(Offset(newPos1X, newPos1Y), u1.type.radius, updatedBuildings) && !isCollidingWithMountain(Offset(newPos1X, newPos1Y), u1.type.radius, updatedTerrainMap)) {
                             updatedUnits[i] = u1.copy(position = Offset(newPos1X, newPos1Y))
                         }
-                        if (!isCollidingWithBuilding(Offset(newPos2X, newPos2Y), u2.type.radius, updatedBuildings)) {
+                        if (!isCollidingWithBuilding(Offset(newPos2X, newPos2Y), u2.type.radius, updatedBuildings) && !isCollidingWithMountain(Offset(newPos2X, newPos2Y), u2.type.radius, updatedTerrainMap)) {
                             updatedUnits[j] = u2.copy(position = Offset(newPos2X, newPos2Y))
                         }
                     }
@@ -535,7 +587,11 @@ class GameViewModel : ViewModel() {
                 if (it.isSelected && !it.isEnemy) {
                     val offsetX = Random.nextFloat() * 40f - 20f
                     val offsetY = Random.nextFloat() * 40f - 20f
-                    it.copy(targetPosition = target + Offset(offsetX, offsetY))
+                    val t = target + Offset(offsetX, offsetY)
+                    val p = findPath(it.position, t, state.terrainMap, state.buildings)
+                    val nextTarget = p.firstOrNull()
+                    val remainingPath = if (p.isNotEmpty()) p.drop(1) else emptyList()
+                    it.copy(targetPosition = nextTarget, path = remainingPath)
                 } else it
             }
             state.copy(units = updated)
@@ -638,4 +694,115 @@ class GameViewModel : ViewModel() {
             it.copy(cameraOffset = newOffset)
         }
     }
+}
+
+data class AStarNode(val x: Int, val y: Int, var g: Float = Float.MAX_VALUE, var h: Float = 0f, var parent: AStarNode? = null) {
+    val f: Float get() = g + h
+}
+
+fun findPath(
+    startPos: Offset, 
+    targetPos: Offset, 
+    terrainMap: Map<Pair<Int, Int>, TerrainTile>, 
+    buildings: List<GameBuilding>
+): List<Offset> {
+    val startX = (startPos.x / 60f).toInt().coerceIn(0, 39)
+    val startY = (startPos.y / 60f).toInt().coerceIn(0, 39)
+    val targetX = (targetPos.x / 60f).toInt().coerceIn(0, 39)
+    val targetY = (targetPos.y / 60f).toInt().coerceIn(0, 39)
+    
+    if (startX == targetX && startY == targetY) return listOf(targetPos)
+    
+    val openSet = java.util.PriorityQueue<AStarNode>(compareBy { it.f })
+    val closedSet = mutableSetOf<Pair<Int, Int>>()
+    val nodes = mutableMapOf<Pair<Int, Int>, AStarNode>()
+    
+    val startNode = AStarNode(startX, startY, 0f, distanceAStar(startX, startY, targetX, targetY))
+    openSet.add(startNode)
+    nodes[Pair(startX, startY)] = startNode
+    
+    val obstacles = Array(40) { BooleanArray(40) }
+    for ((coord, tile) in terrainMap) {
+        if (tile.type == TerrainType.MOUNTAIN) {
+            if (coord.first in 0..39 && coord.second in 0..39) {
+                obstacles[coord.first][coord.second] = true
+            }
+        }
+    }
+    for (b in buildings) {
+        val halfW = b.type.width / 2f
+        val halfH = b.type.height / 2f
+        val minX = ((b.position.x - halfW) / 60f).toInt()
+        val maxX = ((b.position.x + halfW) / 60f).toInt()
+        val minY = ((b.position.y - halfH) / 60f).toInt()
+        val maxY = ((b.position.y + halfH) / 60f).toInt()
+        for (cx in minX..maxX) {
+            for (cy in minY..maxY) {
+                if (cx in 0..39 && cy in 0..39) obstacles[cx][cy] = true
+            }
+        }
+    }
+    
+    obstacles[targetX][targetY] = false
+    
+    while (openSet.isNotEmpty()) {
+        val current = openSet.poll()!!
+        if (current.x == targetX && current.y == targetY) {
+            val path = mutableListOf<Offset>()
+            var curr: AStarNode? = current
+            while (curr != null) {
+                if (curr.x == targetX && curr.y == targetY) {
+                    path.add(0, targetPos)
+                } else if (curr.x == startX && curr.y == startY) {
+                    // skip
+                } else {
+                    path.add(0, Offset(curr.x * 60f + 30f, curr.y * 60f + 30f))
+                }
+                curr = curr.parent
+            }
+            return path
+        }
+        
+        closedSet.add(Pair(current.x, current.y))
+        
+        for (dx in -1..1) {
+            for (dy in -1..1) {
+                if (dx == 0 && dy == 0) continue
+                
+                val nx = current.x + dx
+                val ny = current.y + dy
+                
+                if (nx !in 0..39 || ny !in 0..39) continue
+                if (obstacles[nx][ny]) continue
+                if (closedSet.contains(Pair(nx, ny))) continue
+                
+                if (dx != 0 && dy != 0) {
+                    if (obstacles[current.x + dx][current.y] || obstacles[current.x][current.y + dy]) continue
+                }
+                
+                val cost = current.g + if (dx == 0 || dy == 0) 1f else 1.414f
+                val neighborNode = nodes.getOrPut(Pair(nx, ny)) { AStarNode(nx, ny) }
+                
+                if (cost < neighborNode.g) {
+                    neighborNode.g = cost
+                    neighborNode.h = distanceAStar(nx, ny, targetX, targetY)
+                    neighborNode.parent = current
+                    
+                    if (!openSet.contains(neighborNode)) {
+                        openSet.add(neighborNode)
+                    } else {
+                        openSet.remove(neighborNode)
+                        openSet.add(neighborNode)
+                    }
+                }
+            }
+        }
+    }
+    return emptyList()
+}
+
+private fun distanceAStar(x1: Int, y1: Int, x2: Int, y2: Int): Float {
+    val dx = (x1 - x2).toFloat()
+    val dy = (y1 - y2).toFloat()
+    return kotlin.math.sqrt(dx * dx + dy * dy)
 }

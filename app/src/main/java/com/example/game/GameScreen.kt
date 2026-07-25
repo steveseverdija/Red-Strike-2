@@ -244,8 +244,8 @@ fun GameCanvas(state: GameState) {
             val endTy = Math.ceil((viewWorldBottom / gridSize).toDouble()).toInt() + 1
 
             val satelliteGridTextResult = textMeasurer.measure(
-                text = "+",
-                style = TextStyle(color = Color(0xFF1E293B), fontSize = 10.sp) // very dark gray
+                text = "#",
+                style = TextStyle(color = Color(0xFF0F172A), fontSize = 10.sp) // nearly black
             )
 
             for (tx in startTx..endTx) {
@@ -286,7 +286,7 @@ fun GameCanvas(state: GameState) {
                 if (tileX > (-cam.x / scale) - gridSize*2 && tileX < viewWorldRight + gridSize && tileY > (-cam.y / scale) - gridSize*2 && tileY < viewWorldBottom + gridSize) {
                     val tileResult = textMeasurer.measure(
                         text = tile.ascii,
-                        style = TextStyle(color = Color(tile.color), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        style = TextStyle(color = Color(tile.color), fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                     )
                     drawText(
                         textLayoutResult = tileResult,
@@ -301,17 +301,18 @@ fun GameCanvas(state: GameState) {
 
                 val ascii = when (building.type) {
                     BuildingType.WAR_FACTORY -> {
-                        if (isProducing && frame % 2 == 0) "   _!!_\n  | !! |\n /______\\"
-                        else "   _\\/_\n  |    |\n /______\\"
+                        if (isProducing && frame % 2 == 0) "██████████████████████╗ \n██╔══════════════════██╗\n██║  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ██║\n██║  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ██║\n██╚══════════════════██║\n╚══════════════════════╝"
+                        else "██████████████████████╗ \n██╔══════════════════██╗\n██║  ░░░░░░░░░░░░░░  ██║\n██║  ░░░░░░░░░░░░░░  ██║\n██╚══════════════════██║\n╚══════════════════════╝"
                     }
                     BuildingType.BARRACKS -> {
-                        if (isProducing && frame % 2 == 0) "   __  \n  /!!\\ \n  |__| "
-                        else "   __  \n  /  \\ \n  |__| "
+                        if (isProducing && frame % 2 == 0) "██████╗ \n██╔══██╗\n██║▓▓██║\n██╚══██║\n╚══════╝"
+                        else "██████╗ \n██╔══██╗\n██║░░██║\n██╚══██║\n╚══════╝"
                     }
                     BuildingType.CONSTRUCTION_YARD -> {
-                        if (isProducing && frame % 2 == 0) "  /\\/\\ \n | !! |\n |____|"
-                        else "  /\\/\\ \n |    |\n |____|"
+                        if (isProducing && frame % 2 == 0) "██████████╗ \n██╔══════██╗\n██║ ▓▓▓▓ ██║\n██║ ▓▓▓▓ ██║\n██╚══════██║\n╚══════════╝"
+                        else "██████████╗ \n██╔══════██╗\n██║ ░░░░ ██║\n██║ ░░░░ ██║\n██╚══════██║\n╚══════════╝"
                     }
+                    BuildingType.POWER_PLANT -> "██████╗ \n██╔══██╗\n██║████║\n██╚══██║\n╚══════╝"
                     else -> " [  ] "
                 }
 
@@ -326,7 +327,7 @@ fun GameCanvas(state: GameState) {
 
                 val textLayoutResult = textMeasurer.measure(
                     text = ascii,
-                    style = TextStyle(color = baseColor, fontSize = 16.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    style = TextStyle(color = baseColor, fontSize = 8.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                 )
                 
                 drawText(
@@ -348,32 +349,41 @@ fun GameCanvas(state: GameState) {
                 val isAttacking = unit.targetUnitId != null || unit.targetBuildingId != null
                 
                 val ascii = when (unit.type) {
-                    UnitType.INFANTRY, UnitType.HEAVY_INFANTRY -> {
+                    UnitType.INFANTRY -> {
                         if (isAttacking) {
-                            if (frame % 2 == 0) " o>\n/|\\\n/ \\" else " o \n/|>\n/ \\"
+                            if (frame % 2 == 0) " 0 \n██═*\n╚═╝ " else " 0 \n██═ \n╚═╝ "
                         } else if (isMoving) {
-                            if (frame % 2 == 0) " o \n/|\\\n/ \\" else " o \n/|\\\n| |"
+                            if (frame % 2 == 0) " 0 \n██║\n╚═╝" else " 0 \n██╗\n╚═╝"
                         } else {
-                            " o \n/|\\\n/ \\"
+                            " 0 \n██╗\n╚═╝"
+                        }
+                    }
+                    UnitType.HEAVY_INFANTRY -> {
+                        if (isAttacking) {
+                            if (frame % 2 == 0) " [0] \n████═*\n╚═══╝ " else " [0] \n████═ \n╚═══╝ "
+                        } else if (isMoving) {
+                            if (frame % 2 == 0) " [0] \n████║\n╚═══╝" else " [0] \n████╗\n╚═══╝"
+                        } else {
+                            " [0] \n████╗\n╚═══╝"
                         }
                     }
                     UnitType.HEAVY_TANK -> {
-                        if (isAttacking && frame % 2 == 0) "=*[||]*="
-                        else if (isMoving && frame % 2 == 0) "=-[||]-="
-                        else " -[||]- "
+                        if (isAttacking && frame % 2 == 0) "██████╗ \n██╔▓▓██╗\n██║██══*\n██╚▓▓██║\n╚══════╝"
+                        else if (isMoving && frame % 2 == 0) "██████╗ \n██╔░░██╗\n██║██══╝\n██╚░░██║\n╚══════╝"
+                        else "██████╗ \n██╔▓▓██╗\n██║██══╝\n██╚▓▓██║\n╚══════╝"
                     }
                     UnitType.LIGHT_TANK -> {
-                        if (isAttacking && frame % 2 == 0) "*[==]"
-                        else if (isMoving && frame % 2 == 0) "-[==]"
-                        else " [==]"
+                        if (isAttacking && frame % 2 == 0) "████╗ \n██╔▓██╗\n██║█═* \n██╚▓██║\n╚═════╝"
+                        else if (isMoving && frame % 2 == 0) "████╗ \n██╔░██╗\n██║█═╝ \n██╚░██║\n╚═════╝"
+                        else "████╗ \n██╔▓██╗\n██║█═╝ \n██╚▓██║\n╚═════╝"
                     }
                     UnitType.HARVESTER -> {
-                        if (isMoving && frame % 2 == 0) " [__]="
-                        else " [__]"
+                        if (isMoving && frame % 2 == 0) "██████╗ \n██╔░░██╗\n██║░░██║\n██╚░░██║\n╚══════╝"
+                        else "██████╗ \n██╔▓▓██╗\n██║▓▓██║\n██╚▓▓██║\n╚══════╝"
                     }
                 }
                 
-                val fontSize = if (unit.type == UnitType.INFANTRY || unit.type == UnitType.HEAVY_INFANTRY) 10.sp else 12.sp
+                val fontSize = 8.sp
                 val textLayoutResult = textMeasurer.measure(
                     text = ascii,
                     style = TextStyle(color = baseColor, fontSize = fontSize, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)

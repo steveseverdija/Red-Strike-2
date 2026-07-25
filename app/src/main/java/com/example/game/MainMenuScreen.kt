@@ -28,7 +28,7 @@ fun MainMenuScreen(onStartGame: (Int, String, String) -> Unit) {
 
     // Lobby State
     var selectedFaction by remember { mutableStateOf("GDI") }
-    var selectedMap by remember { mutableStateOf("Desert") }
+    var selectedMap by remember { mutableStateOf("Winter") }
     var startingResources by remember { mutableStateOf(5000) }
 
     Box(
@@ -86,17 +86,43 @@ fun MainMenuScreen(onStartGame: (Int, String, String) -> Unit) {
                     
                     Text("> Map:", color = TextSecondary, fontFamily = FontFamily.Monospace)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ChoiceButton("Desert", selectedMap == "Desert") { selectedMap = "Desert" }
+                        ChoiceButton("Winter", selectedMap == "Winter") { selectedMap = "Winter" }
                         ChoiceButton("Forest", selectedMap == "Forest") { selectedMap = "Forest" }
                     }
 
-                    Text("> Starting Resources: $$startingResources", color = TextSecondary, fontFamily = FontFamily.Monospace)
-                    Slider(
-                        value = startingResources.toFloat(),
-                        onValueChange = { startingResources = it.toInt() },
-                        valueRange = 1000f..10000f,
-                        steps = 8
-                    )
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Text("> Starting Resources: $$startingResources", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                        
+                        val maxBars = 20
+                        val fraction = (startingResources - 1000f) / 9000f
+                        val activeBars = (fraction * maxBars).toInt().coerceIn(0, maxBars)
+                        val asciiSlider = "[" + "█".repeat(activeBars) + "-".repeat(maxBars - activeBars) + "]"
+                        
+                        Text(
+                            text = asciiSlider,
+                            color = AccentRed,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 20.sp,
+                            modifier = Modifier
+                                .padding(vertical = 16.dp)
+                                .pointerInput(Unit) {
+                                    detectTapGestures { offset ->
+                                        val touchFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                                        val rawValue = (touchFraction * 9000f) + 1000f
+                                        startingResources = ((rawValue + 500f) / 1000f).toInt() * 1000
+                                        startingResources = startingResources.coerceIn(1000, 10000)
+                                    }
+                                }
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, _ ->
+                                        val touchFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                                        val rawValue = (touchFraction * 9000f) + 1000f
+                                        startingResources = ((rawValue + 500f) / 1000f).toInt() * 1000
+                                        startingResources = startingResources.coerceIn(1000, 10000)
+                                    }
+                                }
+                        )
+                    }
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {

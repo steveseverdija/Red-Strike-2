@@ -3,7 +3,7 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 val BaseBackground = Color(0xFF0A0A0C)
-val MapBackground = Color(0xFF1A1C23)
+val MapBackground = Color(0xFFE5E7EB) // Medium White
 val SidebarBackground = Color(0xFF0D0F14)
 val PanelBackground = Color(0xFF1E293B) // Slate 800
 val PanelBackgroundAlpha = Color(0xCC1E293B) // Slate 800 80%

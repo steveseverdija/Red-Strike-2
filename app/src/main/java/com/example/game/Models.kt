@@ -31,6 +31,7 @@ data class GameUnit(
     val id: String = UUID.randomUUID().toString(),
     var position: Offset,
     var targetPosition: Offset? = null,
+    var path: List<Offset> = emptyList(),
     var targetUnitId: String? = null,
     var targetBuildingId: String? = null,
     val type: UnitType,
@@ -38,6 +39,7 @@ data class GameUnit(
     val isEnemy: Boolean = false,
     var health: Float = type.maxHealth,
     var lastFireTimeMs: Long = 0L,
+    var stuckTimeMs: Long = 0L,
     var rotation: Float = 0f,
     var turretRotation: Float = 0f
 )
