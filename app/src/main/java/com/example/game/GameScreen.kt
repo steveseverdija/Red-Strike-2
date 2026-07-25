@@ -45,7 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.theme.*
 
 @Composable
-fun GameScreen(startingCredits: Int, onExit: () -> Unit, viewModel: GameViewModel = viewModel()) {
+fun GameScreen(startingCredits: Int, mapSize: Int = 40, difficulty: Int = 1, onExit: () -> Unit, viewModel: GameViewModel = viewModel()) {
     val state by viewModel.gameState.collectAsState()
     val context = LocalContext.current
     
@@ -72,7 +72,7 @@ fun GameScreen(startingCredits: Int, onExit: () -> Unit, viewModel: GameViewMode
     }
 
     LaunchedEffect(Unit) {
-        viewModel.initGame(startingCredits)
+        viewModel.initGame(startingCredits, mapSize, difficulty)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -121,9 +121,9 @@ fun GameScreen(startingCredits: Int, onExit: () -> Unit, viewModel: GameViewMode
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("$${state.credits}", color = AccentAmber, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("₿${state.credits}", color = AccentAmber, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text("| PWR: [====  ]", color = AccentGreen, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("| E: [====  ]", color = AccentGreen, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
                 
                 MinimapOverlay(
@@ -157,7 +157,7 @@ fun GameScreen(startingCredits: Int, onExit: () -> Unit, viewModel: GameViewMode
     if (state.status != GameStatus.PLAYING) {
         GameOverOverlay(
             state = state,
-            onRematch = { viewModel.initGame(startingCredits) },
+            onRematch = { viewModel.initGame(startingCredits, mapSize, difficulty) },
             onMainMenu = onExit
         )
     }
@@ -189,16 +189,27 @@ fun Sidebar(viewModel: GameViewModel, state: GameState) {
         }
 
         Column(modifier = Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Units
-            BuildButton("INF", UnitType.INFANTRY.cost, AccentGreen) { viewModel.queueUnit(UnitType.INFANTRY) }
-            BuildButton("HVY INF", UnitType.HEAVY_INFANTRY.cost, AccentGreen) { viewModel.queueUnit(UnitType.HEAVY_INFANTRY) }
-            BuildButton("L.TANK", UnitType.LIGHT_TANK.cost, AccentAmber) { viewModel.queueUnit(UnitType.LIGHT_TANK) }
-            BuildButton("H.TANK", UnitType.HEAVY_TANK.cost, AccentAmber) { viewModel.queueUnit(UnitType.HEAVY_TANK) }
-            BuildButton("HARV", UnitType.HARVESTER.cost, Color.LightGray) { viewModel.queueUnit(UnitType.HARVESTER) }
-            
-            // Buildings
-            BuildButton("BARRACK", BuildingType.BARRACKS.cost, AccentRed) { viewModel.queueBuilding(BuildingType.BARRACKS) }
-            BuildButton("FACTORY", BuildingType.WAR_FACTORY.cost, AccentRed) { viewModel.queueBuilding(BuildingType.WAR_FACTORY) }
+            val cmdExists = state.buildings.any { it.type == BuildingType.COMMAND && !it.isEnemy && it.health > 0 && it.isSelected }
+            val factoryExists = state.buildings.any { it.type == BuildingType.FACTORY && !it.isEnemy && it.health > 0 && it.isSelected }
+            val sfSelected = state.units.any { it.type == UnitType.SF_SOLDIER && !it.isEnemy && it.isSelected && it.health > 0 }
+            val builderSelected = state.units.any { it.type == UnitType.BUILDER && !it.isEnemy && it.isSelected && it.health > 0 }
+
+            if (cmdExists) {
+                BuildButton("S.F.", UnitType.SF_SOLDIER.cost, AccentGreen) { viewModel.queueUnit(UnitType.SF_SOLDIER) }
+                BuildButton("BLDR", UnitType.BUILDER.cost, AccentGreen) { viewModel.queueUnit(UnitType.BUILDER) }
+            }
+            if (factoryExists) {
+                BuildButton("DRONE", UnitType.DRONE.cost, Color(0xFF60A5FA)) { viewModel.queueUnit(UnitType.DRONE) }
+                BuildButton("L.A.V", UnitType.L_A_V.cost, AccentAmber) { viewModel.queueUnit(UnitType.L_A_V) }
+                BuildButton("TANK", UnitType.TANK.cost, AccentAmber) { viewModel.queueUnit(UnitType.TANK) }
+                BuildButton("HARV", UnitType.HARVESTER.cost, Color.LightGray) { viewModel.queueUnit(UnitType.HARVESTER) }
+            }
+            if (sfSelected) {
+                BuildButton("COMMAND", BuildingType.COMMAND.cost, AccentRed) { viewModel.queueBuilding(BuildingType.COMMAND) }
+            }
+            if (builderSelected) {
+                BuildButton("FACTORY", BuildingType.FACTORY.cost, AccentRed) { viewModel.queueBuilding(BuildingType.FACTORY) }
+            }
         }
     }
 }
@@ -208,7 +219,7 @@ fun BuildButton(name: String, cost: Int, color: Color, onClick: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().aspectRatio(1.2f).clickable(onClick=onClick), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("[$name]", color = color, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-            Text("$$cost", color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            Text("₿$cost", color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
         }
     }
 }
@@ -253,7 +264,7 @@ fun GameCanvas(state: GameState) {
                     val wx = tx * gridSize
                     val wy = ty * gridSize
                     
-                    if (tx < 0 || tx > 39 || ty < 0 || ty > 39) {
+                    if (tx < 0 || tx > state.mapSize - 1 || ty < 0 || ty > state.mapSize - 1) {
                         drawText(
                             textLayoutResult = satelliteGridTextResult,
                             topLeft = Offset(wx, wy)
@@ -264,7 +275,7 @@ fun GameCanvas(state: GameState) {
                             topLeft = Offset(wx, wy)
                         )
                         // Map boundary ascii
-                        if (tx == 0 || tx == 39 || ty == 0 || ty == 39) {
+                        if (tx == 0 || tx == state.mapSize - 1 || ty == 0 || ty == state.mapSize - 1) {
                             val boundaryText = textMeasurer.measure(
                                 text = "X",
                                 style = TextStyle(color = Color(0xFF1E293B), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
@@ -297,18 +308,14 @@ fun GameCanvas(state: GameState) {
 
             // Draw Buildings
             state.buildings.forEach { building ->
-                val isProducing = state.productionQueue.any { it.isBuilding && building.type == BuildingType.CONSTRUCTION_YARD || (!it.isBuilding && ((it.type as UnitType) == UnitType.INFANTRY || (it.type as UnitType) == UnitType.HEAVY_INFANTRY) && building.type == BuildingType.BARRACKS) || (!it.isBuilding && ((it.type as UnitType) == UnitType.LIGHT_TANK || (it.type as UnitType) == UnitType.HEAVY_TANK || (it.type as UnitType) == UnitType.HARVESTER) && building.type == BuildingType.WAR_FACTORY) }
+                val isProducing = state.productionQueue.any { it.isBuilding && building.type == BuildingType.COMMAND || (!it.isBuilding && (((it.type as UnitType) == UnitType.SF_SOLDIER || (it.type as UnitType) == UnitType.BUILDER) && building.type == BuildingType.COMMAND)) || (!it.isBuilding && ((it.type as UnitType) == UnitType.L_A_V || (it.type as UnitType) == UnitType.TANK || (it.type as UnitType) == UnitType.HARVESTER || (it.type as UnitType) == UnitType.DRONE) && building.type == BuildingType.FACTORY) }
 
                 val ascii = when (building.type) {
-                    BuildingType.WAR_FACTORY -> {
+                    BuildingType.FACTORY -> {
                         if (isProducing && frame % 2 == 0) "██████████████████████╗ \n██╔══════════════════██╗\n██║  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ██║\n██║  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ██║\n██╚══════════════════██║\n╚══════════════════════╝"
                         else "██████████████████████╗ \n██╔══════════════════██╗\n██║  ░░░░░░░░░░░░░░  ██║\n██║  ░░░░░░░░░░░░░░  ██║\n██╚══════════════════██║\n╚══════════════════════╝"
                     }
-                    BuildingType.BARRACKS -> {
-                        if (isProducing && frame % 2 == 0) "██████╗ \n██╔══██╗\n██║▓▓██║\n██╚══██║\n╚══════╝"
-                        else "██████╗ \n██╔══██╗\n██║░░██║\n██╚══██║\n╚══════╝"
-                    }
-                    BuildingType.CONSTRUCTION_YARD -> {
+                                        BuildingType.COMMAND -> {
                         if (isProducing && frame % 2 == 0) "██████████╗ \n██╔══════██╗\n██║ ▓▓▓▓ ██║\n██║ ▓▓▓▓ ██║\n██╚══════██║\n╚══════════╝"
                         else "██████████╗ \n██╔══════██╗\n██║ ░░░░ ██║\n██║ ░░░░ ██║\n██╚══════██║\n╚══════════╝"
                     }
@@ -349,7 +356,10 @@ fun GameCanvas(state: GameState) {
                 val isAttacking = unit.targetUnitId != null || unit.targetBuildingId != null
                 
                 val ascii = when (unit.type) {
-                    UnitType.INFANTRY -> {
+                                        UnitType.BUILDER -> {
+                        if (isMoving && frame % 2 == 0) " _ \n|O|\n=O=" else " _ \n|O|\n=o="
+                    }
+                    UnitType.SF_SOLDIER -> {
                         if (isAttacking) {
                             if (frame % 2 == 0) " 0 \n██═*\n╚═╝ " else " 0 \n██═ \n╚═╝ "
                         } else if (isMoving) {
@@ -358,24 +368,22 @@ fun GameCanvas(state: GameState) {
                             " 0 \n██╗\n╚═╝"
                         }
                     }
-                    UnitType.HEAVY_INFANTRY -> {
-                        if (isAttacking) {
-                            if (frame % 2 == 0) " [0] \n████═*\n╚═══╝ " else " [0] \n████═ \n╚═══╝ "
-                        } else if (isMoving) {
-                            if (frame % 2 == 0) " [0] \n████║\n╚═══╝" else " [0] \n████╗\n╚═══╝"
-                        } else {
-                            " [0] \n████╗\n╚═══╝"
-                        }
+                    UnitType.DRONE -> {
+                        if (isAttacking && frame % 2 == 0) " \\   / \n  ===  \n  [O]=>\n  ===  \n /   \\ "
+                        else if (isAttacking) " /   \\ \n  ===  \n  [O]=>\n  ===  \n \\   / "
+                        else if (isMoving && frame % 2 == 0) " -   - \n  ===  \n  [O]  \n  ===  \n -   - "
+                        else " \\   / \n  ===  \n  [O]  \n  ===  \n /   \\ "
                     }
-                    UnitType.HEAVY_TANK -> {
-                        if (isAttacking && frame % 2 == 0) "██████╗ \n██╔▓▓██╗\n██║██══*\n██╚▓▓██║\n╚══════╝"
-                        else if (isMoving && frame % 2 == 0) "██████╗ \n██╔░░██╗\n██║██══╝\n██╚░░██║\n╚══════╝"
-                        else "██████╗ \n██╔▓▓██╗\n██║██══╝\n██╚▓▓██║\n╚══════╝"
+                    UnitType.TANK -> {
+                        if (isAttacking && frame % 2 == 0) "▄██████▄\n████████\n█[O]═  *\n████████\n▀██████▀"
+                        else if (isMoving && frame % 2 == 0) "▀██████▀\n████████\n██[O]═══\n████████\n▄██████▄"
+                        else "▄██████▄\n████████\n██[O]═══\n████████\n▀██████▀"
                     }
-                    UnitType.LIGHT_TANK -> {
-                        if (isAttacking && frame % 2 == 0) "████╗ \n██╔▓██╗\n██║█═* \n██╚▓██║\n╚═════╝"
-                        else if (isMoving && frame % 2 == 0) "████╗ \n██╔░██╗\n██║█═╝ \n██╚░██║\n╚═════╝"
-                        else "████╗ \n██╔▓██╗\n██║█═╝ \n██╚▓██║\n╚═════╝"
+                    UnitType.L_A_V -> {
+                        if (isAttacking && frame % 2 == 0) " ▄████▄\n ▀████▀\n██(oo)──*\n ▄████▄\n ▀████▀"
+                        else if (isAttacking) " ▄████▄\n ▀████▀\n██(oo)──-\n ▄████▄\n ▀████▀"
+                        else if (isMoving && frame % 2 == 0) " ▀████▀\n ▄████▄\n██(oo)──\n ▀████▀\n ▄████▄"
+                        else " ▄████▄\n ▀████▀\n██(oo)──\n ▄████▄\n ▀████▀"
                     }
                     UnitType.HARVESTER -> {
                         if (isMoving && frame % 2 == 0) "██████╗ \n██╔░░██╗\n██║░░██║\n██╚░░██║\n╚══════╝"
@@ -396,7 +404,7 @@ fun GameCanvas(state: GameState) {
                     size = Size(textLayoutResult.size.width.toFloat(), textLayoutResult.size.height.toFloat())
                 )
                 
-                if (unit.type == UnitType.HEAVY_TANK || unit.type == UnitType.LIGHT_TANK || unit.type == UnitType.HARVESTER) {
+                if (unit.type == UnitType.TANK || unit.type == UnitType.L_A_V || unit.type == UnitType.HARVESTER || unit.type == UnitType.DRONE) {
                    rotate(degrees = unit.rotation, pivot = unit.position) {
                        drawText(
                            textLayoutResult = textLayoutResult,
@@ -552,7 +560,7 @@ fun MinimapOverlay(
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(false) }
-    val mapSize = 2000f
+    val mapSize = state.mapSize * 60f
     val minimapSizeDp = if (isExpanded) 200.dp else 100.dp
     
     Box(

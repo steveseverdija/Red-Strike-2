@@ -23,13 +23,15 @@ import com.example.ui.theme.*
 enum class MenuScreenState { MAIN, LOBBY, SETTINGS }
 
 @Composable
-fun MainMenuScreen(onStartGame: (Int, String, String) -> Unit) {
+fun MainMenuScreen(onStartGame: (Int, String, String, Int, Int) -> Unit) {
     var screenState by remember { mutableStateOf(MenuScreenState.MAIN) }
 
     // Lobby State
     var selectedFaction by remember { mutableStateOf("GDI") }
     var selectedMap by remember { mutableStateOf("Winter") }
     var startingResources by remember { mutableStateOf(5000) }
+    var mapSize by remember { mutableStateOf(40) }
+    var difficulty by remember { mutableStateOf(1) } // 0=Easy, 1=Normal, 2=Hard
 
     Box(
         modifier = Modifier
@@ -91,7 +93,7 @@ fun MainMenuScreen(onStartGame: (Int, String, String) -> Unit) {
                     }
 
                     Column(horizontalAlignment = Alignment.Start) {
-                        Text("> Starting Resources: $$startingResources", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                        Text("> Starting Resources: ₿$startingResources", color = TextSecondary, fontFamily = FontFamily.Monospace)
                         
                         val maxBars = 20
                         val fraction = (startingResources - 1000f) / 9000f
@@ -123,13 +125,79 @@ fun MainMenuScreen(onStartGame: (Int, String, String) -> Unit) {
                                 }
                         )
                     }
+
+                    Column(horizontalAlignment = Alignment.Start) {
+                        val sizeStr = if (mapSize == 20) "Small (20x20)" else if (mapSize == 40) "Medium (40x40)" else if (mapSize == 60) "Large (60x60)" else if (mapSize == 80) "Huge (80x80)" else "${mapSize}x${mapSize}"
+                        Text("> Map Size: $sizeStr", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                        
+                        val maxBars = 20
+                        val fraction = (mapSize - 20f) / 60f
+                        val activeBars = (fraction * maxBars).toInt().coerceIn(0, maxBars)
+                        val asciiSlider = "[" + "█".repeat(activeBars) + "-".repeat(maxBars - activeBars) + "]"
+                        
+                        Text(
+                            text = asciiSlider,
+                            color = AccentRed,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 20.sp,
+                            modifier = Modifier
+                                .padding(vertical = 16.dp)
+                                .pointerInput(Unit) {
+                                    detectTapGestures { offset ->
+                                        val touchFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                                        val rawValue = (touchFraction * 60f) + 20f
+                                        mapSize = ((rawValue + 10f) / 20f).toInt() * 20
+                                        mapSize = mapSize.coerceIn(20, 80)
+                                    }
+                                }
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, _ ->
+                                        val touchFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                                        val rawValue = (touchFraction * 60f) + 20f
+                                        mapSize = ((rawValue + 10f) / 20f).toInt() * 20
+                                        mapSize = mapSize.coerceIn(20, 80)
+                                    }
+                                }
+                        )
+                    }
+                    
+                                        Column(horizontalAlignment = Alignment.Start) {
+                        val diffStr = if (difficulty == 0) "Easy" else if (difficulty == 1) "Normal" else "Hard"
+                        Text("> Enemy Difficulty: $diffStr", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                        
+                        val maxBars = 20
+                        val fraction = difficulty / 2f
+                        val activeBars = (fraction * maxBars).toInt().coerceIn(0, maxBars)
+                        val asciiSlider = "[" + "█".repeat(activeBars) + "-".repeat(maxBars - activeBars) + "]"
+                        
+                        Text(
+                            text = asciiSlider,
+                            color = AccentRed,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 20.sp,
+                            modifier = Modifier
+                                .padding(vertical = 16.dp)
+                                .pointerInput(Unit) {
+                                    detectTapGestures { offset ->
+                                        val touchFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                                        difficulty = (touchFraction * 2).toInt().coerceIn(0, 2)
+                                    }
+                                }
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, _ ->
+                                        val touchFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                                        difficulty = (touchFraction * 2).toInt().coerceIn(0, 2)
+                                    }
+                                }
+                        )
+                    }
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         MenuButton("[ BACK ]", modifier = Modifier.weight(1f)) { screenState = MenuScreenState.MAIN }
                         Spacer(modifier = Modifier.width(16.dp))
                         MenuButton("[ START ]", modifier = Modifier.weight(1f), color = AccentRedDark) { 
-                            onStartGame(startingResources, selectedFaction, selectedMap) 
+                            onStartGame(startingResources, selectedFaction, selectedMap, mapSize, difficulty) 
                         }
                     }
                 }

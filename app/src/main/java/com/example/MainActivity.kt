@@ -21,12 +21,16 @@ class MainActivity : ComponentActivity() {
       MyApplicationTheme {
         var isPlaying by remember { mutableStateOf(false) }
         var startingCredits by remember { mutableStateOf(5000) }
+        var mapSize by remember { mutableStateOf(40) }
+        var difficulty by remember { mutableStateOf(1) } // 0=Easy, 1=Normal, 2=Hard
         
         if (isPlaying) {
-            GameScreen(startingCredits = startingCredits, onExit = { isPlaying = false })
+            GameScreen(startingCredits = startingCredits, mapSize = mapSize, difficulty = difficulty, onExit = { isPlaying = false })
         } else {
-            MainMenuScreen(onStartGame = { credits, _, _ -> 
+            MainMenuScreen(onStartGame = { credits, _, _, size, diff -> 
                 startingCredits = credits
+                mapSize = size
+                difficulty = diff
                 isPlaying = true 
             })
         }

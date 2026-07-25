@@ -22,10 +22,10 @@ class GameViewModel : ViewModel() {
     
     private val MAX_UNITS = 100
 
-    fun initGame(startingCredits: Int) {
+    fun initGame(startingCredits: Int, mapSize: Int = 40, difficulty: Int = 1) {
         val newTerrainMap = mutableMapOf<Pair<Int, Int>, TerrainTile>()
-        for (x in 0..39) {
-            for (y in 0..39) {
+        for (x in 0 until mapSize) {
+            for (y in 0 until mapSize) {
                 val rand = Random.nextFloat()
                 if (rand < 0.05f) {
                     val mountains = listOf(
@@ -51,19 +51,25 @@ class GameViewModel : ViewModel() {
         
         // clear base areas
         for (x in 2..8) for (y in 2..8) newTerrainMap.remove(Pair(x, y))
-        for (x in 20..28) for (y in 20..28) newTerrainMap.remove(Pair(x, y))
+        val eStartX = (mapSize - 10).coerceAtLeast(10)
+        val eStartY = (mapSize - 10).coerceAtLeast(10)
+        for (x in eStartX..(eStartX+8)) for (y in eStartY..(eStartY+8)) newTerrainMap.remove(Pair(x, y))
 
-        _gameState.value = GameState(credits = startingCredits, terrainMap = newTerrainMap)
+        _gameState.value = GameState(credits = startingCredits, terrainMap = newTerrainMap, mapSize = mapSize, difficulty = difficulty)
         
         // Spawn Player Base
-        spawnBuilding(BuildingType.CONSTRUCTION_YARD, Offset(300f, 300f), false)
-        spawnBuilding(BuildingType.BARRACKS, Offset(400f, 300f), false)
-        spawnUnit(UnitType.INFANTRY, Offset(350f, 350f), false)
+        spawnBuilding(BuildingType.COMMAND, Offset(300f, 300f), false)
+        
+        spawnUnit(UnitType.BUILDER, Offset(350f, 350f), false)
+        spawnUnit(UnitType.HARVESTER, Offset(300f, 400f), false)
 
         // Spawn Enemy Base
-        spawnBuilding(BuildingType.CONSTRUCTION_YARD, Offset(1500f, 1500f), true)
-        spawnBuilding(BuildingType.WAR_FACTORY, Offset(1400f, 1500f), true)
-        spawnUnit(UnitType.LIGHT_TANK, Offset(1450f, 1450f), true)
+        val eBaseX = eStartX * 60f + 100f
+        val eBaseY = eStartY * 60f + 100f
+        spawnBuilding(BuildingType.COMMAND, Offset(eBaseX, eBaseY), true)
+        spawnBuilding(BuildingType.FACTORY, Offset(eBaseX - 100f, eBaseY), true)
+        spawnUnit(UnitType.BUILDER, Offset(eBaseX - 50f, eBaseY - 50f), true)
+        spawnUnit(UnitType.HARVESTER, Offset(eBaseX, eBaseY + 100f), true)
         
         startGameLoop()
     }
@@ -93,7 +99,8 @@ class GameViewModel : ViewModel() {
         return dx * dx + dy * dy
     }
 
-    private fun isCollidingWithBuilding(pos: Offset, radius: Float, buildings: List<GameBuilding>): Boolean {
+    private fun isCollidingWithBuilding(pos: Offset, radius: Float, buildings: List<GameBuilding>, isFlying: Boolean = false): Boolean {
+        if (isFlying) return false
         for (b in buildings) {
             val halfW = b.type.width / 2f
             val halfH = b.type.height / 2f
@@ -114,7 +121,8 @@ class GameViewModel : ViewModel() {
         return false
     }
 
-    private fun isCollidingWithMountain(pos: Offset, radius: Float, terrainMap: Map<Pair<Int, Int>, TerrainTile>): Boolean {
+    private fun isCollidingWithMountain(pos: Offset, radius: Float, terrainMap: Map<Pair<Int, Int>, TerrainTile>, isFlying: Boolean = false): Boolean {
+        if (isFlying) return false
         val tx = (pos.x / 60f).toInt()
         val ty = (pos.y / 60f).toInt()
         for (dx in -1..1) {
@@ -150,8 +158,8 @@ class GameViewModel : ViewModel() {
             val updatedTerrainMap = state.terrainMap.toMutableMap()
             
             if (newQueue.isNotEmpty()) {
-                var barracksAvailable = state.buildings.count { it.type == BuildingType.BARRACKS && !it.isEnemy && it.health > 0 }
-                var factoriesAvailable = state.buildings.count { it.type == BuildingType.WAR_FACTORY && !it.isEnemy && it.health > 0 }
+                var commandBuildingsAvailable = state.buildings.count { it.type == BuildingType.COMMAND && !it.isEnemy && it.health > 0 }
+                var factoriesAvailable = state.buildings.count { it.type == BuildingType.FACTORY && !it.isEnemy && it.health > 0 }
                 val itemsToRemove = mutableListOf<ProductionItem>()
 
                 for (item in newQueue) {
@@ -163,14 +171,14 @@ class GameViewModel : ViewModel() {
                         break // Only process one building at a time for now? Or process if we want.
                     } else {
                         val type = item.type as UnitType
-                        if ((type == UnitType.INFANTRY || type == UnitType.HEAVY_INFANTRY) && barracksAvailable > 0) {
-                            barracksAvailable--
+                        if ((type == UnitType.SF_SOLDIER || type == UnitType.BUILDER) && commandBuildingsAvailable > 0) {
+                            commandBuildingsAvailable--
                             item.remainingTimeMs -= deltaMs
                             if (item.remainingTimeMs <= 0) {
                                 itemsToRemove.add(item)
                                 unitsToSpawn.add(type)
                             }
-                        } else if ((type == UnitType.LIGHT_TANK || type == UnitType.HEAVY_TANK || type == UnitType.HARVESTER) && factoriesAvailable > 0) {
+                        } else if ((type == UnitType.L_A_V || type == UnitType.TANK || type == UnitType.HARVESTER || type == UnitType.DRONE) && factoriesAvailable > 0) {
                             factoriesAvailable--
                             item.remainingTimeMs -= deltaMs
                             if (item.remainingTimeMs <= 0) {
@@ -189,12 +197,34 @@ class GameViewModel : ViewModel() {
             // Spawn newly built units
             unitsToSpawn.forEach { type ->
                 if (updatedUnits.count { !it.isEnemy } < MAX_UNITS) {
-                    val barrack = state.buildings.firstOrNull { it.type == BuildingType.BARRACKS && !it.isEnemy }
-                    val factory = state.buildings.firstOrNull { it.type == BuildingType.WAR_FACTORY && !it.isEnemy }
-                    val spawnBuilding = if (type == UnitType.INFANTRY || type == UnitType.HEAVY_INFANTRY) barrack else factory
+                    val cmd = state.buildings.firstOrNull { it.type == BuildingType.COMMAND && !it.isEnemy && it.isSelected } ?: state.buildings.firstOrNull { it.type == BuildingType.COMMAND && !it.isEnemy }
+                    val factory = state.buildings.firstOrNull { it.type == BuildingType.FACTORY && !it.isEnemy && it.isSelected } ?: state.buildings.firstOrNull { it.type == BuildingType.FACTORY && !it.isEnemy }
+                    val spawnBuilding = if (type == UnitType.SF_SOLDIER || type == UnitType.BUILDER) cmd else factory
                     
-                    val spawnPos = spawnBuilding?.position?.plus(Offset(0f, 60f)) ?: Offset(300f, 300f)
-                    updatedUnits.add(GameUnit(type = type, position = spawnPos, isEnemy = false))
+                    var validPos: Offset? = null
+                    if (spawnBuilding != null) {
+                        for (r in listOf(60f, 80f, 100f)) {
+                            for (angle in 0 until 360 step 45) {
+                                val rad = Math.toRadians(angle.toDouble())
+                                val testPos = spawnBuilding.position + Offset(r * kotlin.math.cos(rad).toFloat(), r * kotlin.math.sin(rad).toFloat())
+                                if (!isCollidingWithBuilding(testPos, type.radius, updatedBuildings, type.isFlying) && !isCollidingWithMountain(testPos, type.radius, updatedTerrainMap, type.isFlying)) {
+                                    validPos = testPos
+                                    break
+                                }
+                            }
+                            if (validPos != null) break
+                        }
+                    }
+                    val spawnPos = validPos ?: (spawnBuilding?.position?.plus(Offset(0f, 60f)) ?: Offset(300f, 300f))
+                    var targetPos: Offset? = null
+                    var path: List<Offset> = emptyList()
+                    if (spawnBuilding?.rallyPoint != null) {
+                        targetPos = spawnBuilding.rallyPoint
+                        val p = findPath(spawnPos, targetPos!!, updatedTerrainMap, updatedBuildings, state.mapSize, type.isFlying)
+                        targetPos = p.firstOrNull()
+                        path = if (p.isNotEmpty()) p.drop(1) else emptyList()
+                    }
+                    updatedUnits.add(GameUnit(type = type, position = spawnPos, isEnemy = false, targetPosition = targetPos, path = path))
                 }
             }
 
@@ -211,7 +241,7 @@ class GameViewModel : ViewModel() {
 
                 // Auto-acquire target in range
                 val rangeSq = unit.type.attackRange * unit.type.attackRange
-                targetEnemy = updatedUnits.firstOrNull { it.isEnemy != unit.isEnemy && it.health > 0 && distSq(it.position, unit.position) <= rangeSq }
+                targetEnemy = updatedUnits.firstOrNull { it.isEnemy != unit.isEnemy && it.health > 0 && distSq(it.position, unit.position) <= rangeSq && !((unit.type == UnitType.TANK || unit.type == UnitType.L_A_V) && it.type.isFlying) }
                 
                 if (targetEnemy == null) {
                     targetBuilding = updatedBuildings.firstOrNull { b -> 
@@ -282,7 +312,7 @@ class GameViewModel : ViewModel() {
                     }
                     if (closestTree != null) {
                         val target = Offset(closestTree.first * 60f + 30f, closestTree.second * 60f + 30f)
-                        val p = findPath(unit.position, target, updatedTerrainMap, updatedBuildings)
+                        val p = findPath(unit.position, target, updatedTerrainMap, updatedBuildings, state.mapSize, unit.type.isFlying)
                         val nextTarget = p.firstOrNull()
                         val remainingPath = if (p.isNotEmpty()) p.drop(1) else emptyList()
                         unit = unit.copy(targetPosition = nextTarget, path = remainingPath)
@@ -309,24 +339,24 @@ class GameViewModel : ViewModel() {
                         var newPosX = unit.position.x + moveX
                         var newPosY = unit.position.y + moveY
                         
-                        val mapMax = 40f * 60f
+                        val mapMax = state.mapSize * 60f
                         newPosX = newPosX.coerceIn(0f, mapMax)
                         newPosY = newPosY.coerceIn(0f, mapMax)
                         
-                        val wasCollidingBuilding = isCollidingWithBuilding(unit.position, unit.type.radius, updatedBuildings)
-                        val wasCollidingMountain = isCollidingWithMountain(unit.position, unit.type.radius, updatedTerrainMap)
+                        val wasCollidingBuilding = isCollidingWithBuilding(unit.position, unit.type.radius, updatedBuildings, unit.type.isFlying)
+                        val wasCollidingMountain = isCollidingWithMountain(unit.position, unit.type.radius, updatedTerrainMap, unit.type.isFlying)
 
-                        val collidesWithBuilding = isCollidingWithBuilding(Offset(newPosX, newPosY), unit.type.radius, updatedBuildings)
-                        val collidesWithMountain = isCollidingWithMountain(Offset(newPosX, newPosY), unit.type.radius, updatedTerrainMap)
+                        val collidesWithBuilding = isCollidingWithBuilding(Offset(newPosX, newPosY), unit.type.radius, updatedBuildings, unit.type.isFlying)
+                        val collidesWithMountain = isCollidingWithMountain(Offset(newPosX, newPosY), unit.type.radius, updatedTerrainMap, unit.type.isFlying)
                         
                         val hitBuilding = collidesWithBuilding && !wasCollidingBuilding
                         val hitMountain = collidesWithMountain && !wasCollidingMountain
 
                         if (hitBuilding || hitMountain) {
-                            val newXHitBuilding = isCollidingWithBuilding(Offset(newPosX, unit.position.y), unit.type.radius, updatedBuildings) && !wasCollidingBuilding
-                            val newXHitMountain = isCollidingWithMountain(Offset(newPosX, unit.position.y), unit.type.radius, updatedTerrainMap) && !wasCollidingMountain
-                            val newYHitBuilding = isCollidingWithBuilding(Offset(unit.position.x, newPosY), unit.type.radius, updatedBuildings) && !wasCollidingBuilding
-                            val newYHitMountain = isCollidingWithMountain(Offset(unit.position.x, newPosY), unit.type.radius, updatedTerrainMap) && !wasCollidingMountain
+                            val newXHitBuilding = isCollidingWithBuilding(Offset(newPosX, unit.position.y), unit.type.radius, updatedBuildings, unit.type.isFlying) && !wasCollidingBuilding
+                            val newXHitMountain = isCollidingWithMountain(Offset(newPosX, unit.position.y), unit.type.radius, updatedTerrainMap, unit.type.isFlying) && !wasCollidingMountain
+                            val newYHitBuilding = isCollidingWithBuilding(Offset(unit.position.x, newPosY), unit.type.radius, updatedBuildings, unit.type.isFlying) && !wasCollidingBuilding
+                            val newYHitMountain = isCollidingWithMountain(Offset(unit.position.x, newPosY), unit.type.radius, updatedTerrainMap, unit.type.isFlying) && !wasCollidingMountain
 
                             if (!newXHitBuilding && !newXHitMountain) {
                                 newPosY = unit.position.y
@@ -346,7 +376,7 @@ class GameViewModel : ViewModel() {
                             if (currentStuckTime > 1000L && unit.type == UnitType.HARVESTER && !unit.isEnemy) {
                                 val randomOffsetX = kotlin.random.Random.nextFloat() * 200f - 100f
                                 val randomOffsetY = kotlin.random.Random.nextFloat() * 200f - 100f
-                                val escapeTarget = Offset((unit.position.x + randomOffsetX).coerceIn(0f, 2400f), (unit.position.y + randomOffsetY).coerceIn(0f, 2400f))
+                                val escapeTarget = Offset((unit.position.x + randomOffsetX).coerceIn(0f, mapMax), (unit.position.y + randomOffsetY).coerceIn(0f, mapMax))
                                 unit = unit.copy(targetPosition = escapeTarget, path = emptyList(), stuckTimeMs = 0L, rotation = newRotation, turretRotation = newTurretRotation)
                             } else if (currentStuckTime > 500L) {
                                 if (nextTarget == null) {
@@ -395,33 +425,40 @@ class GameViewModel : ViewModel() {
                 updatedUnits[i] = unit
             }
             
-            // Simple unit collision resolution
-            for (i in updatedUnits.indices) {
-                if (updatedUnits[i].health <= 0) continue
-                for (j in i + 1 until updatedUnits.size) {
-                    if (updatedUnits[j].health <= 0) continue
-                    val u1 = updatedUnits[i]
-                    val u2 = updatedUnits[j]
-                    val dx = u2.position.x - u1.position.x
-                    val dy = u2.position.y - u1.position.y
-                    val distSq = dx * dx + dy * dy
-                    val minRadius = u1.type.radius + u2.type.radius
-                    if (distSq > 0f && distSq < minRadius * minRadius) {
-                        val dist = sqrt(distSq)
-                        val overlap = minRadius - dist
-                        val pushX = (dx / dist) * overlap * 0.5f
-                        val pushY = (dy / dist) * overlap * 0.5f
-                        
-                        var newPos1X = u1.position.x - pushX
-                        var newPos1Y = u1.position.y - pushY
-                        var newPos2X = u2.position.x + pushX
-                        var newPos2Y = u2.position.y + pushY
-                        
-                        if (!isCollidingWithBuilding(Offset(newPos1X, newPos1Y), u1.type.radius, updatedBuildings) && !isCollidingWithMountain(Offset(newPos1X, newPos1Y), u1.type.radius, updatedTerrainMap)) {
-                            updatedUnits[i] = u1.copy(position = Offset(newPos1X, newPos1Y))
+            // Simple unit collision resolution - do a few passes for stability
+            for (pass in 0 until 3) {
+                for (i in updatedUnits.indices) {
+                    if (updatedUnits[i].health <= 0) continue
+                    for (j in i + 1 until updatedUnits.size) {
+                        if (updatedUnits[j].health <= 0) continue
+                        val u1 = updatedUnits[i]
+                        val u2 = updatedUnits[j]
+                        if (u1.type.isFlying != u2.type.isFlying) continue
+                        var dx = u2.position.x - u1.position.x
+                        var dy = u2.position.y - u1.position.y
+                        if (dx == 0f && dy == 0f) {
+                            dx = kotlin.random.Random.nextFloat() - 0.5f
+                            dy = kotlin.random.Random.nextFloat() - 0.5f
                         }
-                        if (!isCollidingWithBuilding(Offset(newPos2X, newPos2Y), u2.type.radius, updatedBuildings) && !isCollidingWithMountain(Offset(newPos2X, newPos2Y), u2.type.radius, updatedTerrainMap)) {
-                            updatedUnits[j] = u2.copy(position = Offset(newPos2X, newPos2Y))
+                        val distSq = dx * dx + dy * dy
+                        val minRadius = u1.type.radius + u2.type.radius
+                        if (distSq > 0f && distSq < minRadius * minRadius) {
+                            val dist = sqrt(distSq)
+                            val overlap = minRadius - dist
+                            val pushX = (dx / dist) * overlap * 0.5f
+                            val pushY = (dy / dist) * overlap * 0.5f
+                            
+                            var newPos1X = u1.position.x - pushX
+                            var newPos1Y = u1.position.y - pushY
+                            var newPos2X = u2.position.x + pushX
+                            var newPos2Y = u2.position.y + pushY
+                            
+                            if (!isCollidingWithBuilding(Offset(newPos1X, newPos1Y), u1.type.radius, updatedBuildings, u1.type.isFlying) && !isCollidingWithMountain(Offset(newPos1X, newPos1Y), u1.type.radius, updatedTerrainMap, u1.type.isFlying)) {
+                                updatedUnits[i] = u1.copy(position = Offset(newPos1X, newPos1Y))
+                            }
+                            if (!isCollidingWithBuilding(Offset(newPos2X, newPos2Y), u2.type.radius, updatedBuildings, u2.type.isFlying) && !isCollidingWithMountain(Offset(newPos2X, newPos2Y), u2.type.radius, updatedTerrainMap, u2.type.isFlying)) {
+                                updatedUnits[j] = u2.copy(position = Offset(newPos2X, newPos2Y))
+                            }
                         }
                     }
                 }
@@ -477,10 +514,10 @@ class GameViewModel : ViewModel() {
         val state = _gameState.value
         val enemyUnits = state.units.filter { it.isEnemy }
         
-        if (state.enemyCredits >= UnitType.LIGHT_TANK.cost && enemyUnits.size < 20) {
-            _gameState.update { it.copy(enemyCredits = it.enemyCredits - UnitType.LIGHT_TANK.cost) }
-            val spawnPos = state.buildings.firstOrNull { it.isEnemy && it.type == BuildingType.WAR_FACTORY }?.position ?: Offset(1500f, 1500f)
-            spawnUnit(UnitType.LIGHT_TANK, spawnPos + Offset(0f, 60f), true)
+        if (state.enemyCredits >= UnitType.L_A_V.cost && enemyUnits.size < 20) {
+            _gameState.update { it.copy(enemyCredits = it.enemyCredits - UnitType.L_A_V.cost) }
+            val spawnPos = state.buildings.firstOrNull { it.isEnemy && it.type == BuildingType.FACTORY }?.position ?: Offset(state.mapSize * 60f - 300f, state.mapSize * 60f - 300f)
+            spawnUnit(UnitType.L_A_V, spawnPos + Offset(0f, 60f), true)
         }
         
         if (enemyUnits.isNotEmpty() && Random.nextFloat() < 0.1f) {
@@ -537,6 +574,36 @@ class GameViewModel : ViewModel() {
                 }
             }
 
+            if (!overlaps) {
+                for (u in state.units) {
+                    if (u.health <= 0 || u.type.isFlying) continue
+                    val closestX = u.position.x.coerceIn(minX1, maxX1)
+                    val closestY = u.position.y.coerceIn(minY1, maxY1)
+                    val dx = u.position.x - closestX
+                    val dy = u.position.y - closestY
+                    if (dx * dx + dy * dy < u.type.radius * u.type.radius) {
+                        overlaps = true
+                        break
+                    }
+                }
+            }
+            
+            if (!overlaps) {
+                val txMin = (minX1 / 60f).toInt()
+                val txMax = (maxX1 / 60f).toInt()
+                val tyMin = (minY1 / 60f).toInt()
+                val tyMax = (maxY1 / 60f).toInt()
+                for (tx in txMin..txMax) {
+                    for (ty in tyMin..tyMax) {
+                        if (state.terrainMap[Pair(tx, ty)] != null) {
+                            overlaps = true
+                            break
+                        }
+                    }
+                    if (overlaps) break
+                }
+            }
+
             if (!overlaps && state.credits >= type.cost) {
                 _gameState.update { it.copy(credits = it.credits - type.cost, placingBuildingType = null) }
                 spawnBuilding(type, worldPos, false)
@@ -554,7 +621,7 @@ class GameViewModel : ViewModel() {
 
         if (tappedUnit != null) {
             if (!tappedUnit.isEnemy) {
-                _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = it.id == tappedUnit.id) }) }
+                _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = it.id == tappedUnit.id) }, buildings = s.buildings.map { it.copy(isSelected = false) }) }
             } else {
                 commandSelectedToMove(worldPos)
             }
@@ -564,18 +631,24 @@ class GameViewModel : ViewModel() {
                 val dy = worldPos.y - it.position.y
                 dx > -(it.type.width/2 + hitRadius) && dx < (it.type.width/2 + hitRadius) && dy > -(it.type.height/2 + hitRadius) && dy < (it.type.height/2 + hitRadius)
             }
-            if (tappedBuilding != null && tappedBuilding.isEnemy) {
-                commandSelectedToMove(worldPos)
-                _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = false) }) }
+            if (tappedBuilding != null) {
+                if (tappedBuilding.isEnemy) {
+                    commandSelectedToMove(worldPos)
+                    _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = false) }, buildings = s.buildings.map { it.copy(isSelected = false) }) }
+                } else {
+                    _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = false) }, buildings = s.buildings.map { it.copy(isSelected = it.id == tappedBuilding.id) }) }
+                }
             } else {
                 // Tapped ground
-                val hasSelected = state.units.any { it.isSelected }
-                if (hasSelected) {
+                val hasSelectedUnit = state.units.any { it.isSelected }
+                val hasSelectedBuilding = state.buildings.any { it.isSelected && !it.isEnemy && (it.type == BuildingType.FACTORY || it.type == BuildingType.COMMAND) }
+                if (hasSelectedUnit) {
                     commandSelectedToMove(worldPos)
-                    _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = false) }) }
+                    _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = false) }, buildings = s.buildings.map { it.copy(isSelected = false) }) }
+                } else if (hasSelectedBuilding) {
+                    _gameState.update { s -> s.copy(buildings = s.buildings.map { if (it.isSelected) it.copy(rallyPoint = worldPos) else it }) }
                 } else {
-                    // Touch elsewhere when no units selected: do nothing or ensure deselect
-                    _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = false) }) }
+                    _gameState.update { s -> s.copy(units = s.units.map { it.copy(isSelected = false) }, buildings = s.buildings.map { it.copy(isSelected = false) }) }
                 }
             }
         }
@@ -588,7 +661,7 @@ class GameViewModel : ViewModel() {
                     val offsetX = Random.nextFloat() * 40f - 20f
                     val offsetY = Random.nextFloat() * 40f - 20f
                     val t = target + Offset(offsetX, offsetY)
-                    val p = findPath(it.position, t, state.terrainMap, state.buildings)
+                    val p = findPath(it.position, t, state.terrainMap, state.buildings, state.mapSize, it.type.isFlying)
                     val nextTarget = p.firstOrNull()
                     val remainingPath = if (p.isNotEmpty()) p.drop(1) else emptyList()
                     it.copy(targetPosition = nextTarget, path = remainingPath)
@@ -704,12 +777,16 @@ fun findPath(
     startPos: Offset, 
     targetPos: Offset, 
     terrainMap: Map<Pair<Int, Int>, TerrainTile>, 
-    buildings: List<GameBuilding>
+    buildings: List<GameBuilding>,
+    mapSize: Int,
+    isFlying: Boolean = false
 ): List<Offset> {
-    val startX = (startPos.x / 60f).toInt().coerceIn(0, 39)
-    val startY = (startPos.y / 60f).toInt().coerceIn(0, 39)
-    val targetX = (targetPos.x / 60f).toInt().coerceIn(0, 39)
-    val targetY = (targetPos.y / 60f).toInt().coerceIn(0, 39)
+    if (isFlying) return listOf(targetPos)
+    val maxCoord = mapSize - 1
+    val startX = (startPos.x / 60f).toInt().coerceIn(0, maxCoord)
+    val startY = (startPos.y / 60f).toInt().coerceIn(0, maxCoord)
+    val targetX = (targetPos.x / 60f).toInt().coerceIn(0, maxCoord)
+    val targetY = (targetPos.y / 60f).toInt().coerceIn(0, maxCoord)
     
     if (startX == targetX && startY == targetY) return listOf(targetPos)
     
@@ -721,10 +798,10 @@ fun findPath(
     openSet.add(startNode)
     nodes[Pair(startX, startY)] = startNode
     
-    val obstacles = Array(40) { BooleanArray(40) }
+    val obstacles = Array(mapSize) { BooleanArray(mapSize) }
     for ((coord, tile) in terrainMap) {
         if (tile.type == TerrainType.MOUNTAIN) {
-            if (coord.first in 0..39 && coord.second in 0..39) {
+            if (coord.first in 0..maxCoord && coord.second in 0..maxCoord) {
                 obstacles[coord.first][coord.second] = true
             }
         }
@@ -738,7 +815,7 @@ fun findPath(
         val maxY = ((b.position.y + halfH) / 60f).toInt()
         for (cx in minX..maxX) {
             for (cy in minY..maxY) {
-                if (cx in 0..39 && cy in 0..39) obstacles[cx][cy] = true
+                if (cx in 0..maxCoord && cy in 0..maxCoord) obstacles[cx][cy] = true
             }
         }
     }
@@ -772,7 +849,7 @@ fun findPath(
                 val nx = current.x + dx
                 val ny = current.y + dy
                 
-                if (nx !in 0..39 || ny !in 0..39) continue
+                if (nx !in 0..maxCoord || ny !in 0..maxCoord) continue
                 if (obstacles[nx][ny]) continue
                 if (closedSet.contains(Pair(nx, ny))) continue
                 

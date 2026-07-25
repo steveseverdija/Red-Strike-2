@@ -3,18 +3,18 @@ package com.example.game
 import androidx.compose.ui.geometry.Offset
 import java.util.UUID
 
-enum class UnitType(val speed: Float, val radius: Float, val color: Long, val cost: Int, val buildTimeMs: Long, val maxHealth: Float, val damage: Float, val attackRange: Float, val attackCooldownMs: Long) {
-    INFANTRY(2f, 8f, 0xFF4ADE80, 100, 2000L, 50f, 10f, 60f, 1000L),
-    HEAVY_INFANTRY(1.5f, 10f, 0xFF4ADE80, 200, 3000L, 100f, 25f, 80f, 1500L),
-    LIGHT_TANK(3.5f, 15f, 0xFFFBBF24, 300, 4000L, 200f, 40f, 120f, 2000L),
-    HEAVY_TANK(2.5f, 20f, 0xFFFBBF24, 600, 6000L, 400f, 80f, 150f, 2500L),
+enum class UnitType(val speed: Float, val radius: Float, val color: Long, val cost: Int, val buildTimeMs: Long, val maxHealth: Float, val damage: Float, val attackRange: Float, val attackCooldownMs: Long, val isFlying: Boolean = false) {
+    SF_SOLDIER(2f, 8f, 0xFF4ADE80, 100, 2000L, 50f, 10f, 60f, 1000L),
+    BUILDER(2f, 10f, 0xFF059669, 200, 3000L, 100f, 0f, 0f, 1000L),
+    DRONE(3f, 10f, 0xFF60A5FA, 250, 3000L, 80f, 20f, 90f, 1500L, true),
+    L_A_V(3.5f, 15f, 0xFFFBBF24, 300, 4000L, 200f, 40f, 120f, 2000L),
+    TANK(2.5f, 20f, 0xFFFBBF24, 600, 6000L, 400f, 80f, 150f, 2500L),
     HARVESTER(2f, 18f, 0xFF94A3B8, 500, 5000L, 300f, 0f, 0f, 1000L)
 }
 
 enum class BuildingType(val width: Float, val height: Float, val color: Long, val cost: Int, val buildTimeMs: Long) {
-    CONSTRUCTION_YARD(60f, 60f, 0xFF3E0000, 0, 0L),
-    BARRACKS(40f, 40f, 0xFF1E293B, 300, 3000L),
-    WAR_FACTORY(120f, 65f, 0xFF1E293B, 800, 6000L),
+    COMMAND(60f, 60f, 0xFF3E0000, 1000, 10000L),
+    FACTORY(120f, 65f, 0xFF1E293B, 800, 6000L),
     POWER_PLANT(40f, 40f, 0xFF1E293B, 200, 2000L)
 }
 
@@ -24,7 +24,8 @@ data class GameBuilding(
     val position: Offset,
     val isEnemy: Boolean = false,
     var health: Float = 1000f,
-    var isSelected: Boolean = false
+    var isSelected: Boolean = false,
+    var rallyPoint: Offset? = null
 )
 
 data class GameUnit(
@@ -36,6 +37,7 @@ data class GameUnit(
     var targetBuildingId: String? = null,
     val type: UnitType,
     var isSelected: Boolean = false,
+    var rallyPoint: Offset? = null,
     val isEnemy: Boolean = false,
     var health: Float = type.maxHealth,
     var lastFireTimeMs: Long = 0L,
@@ -73,6 +75,8 @@ data class Particle(
 
 data class GameState(
     val status: GameStatus = GameStatus.PLAYING,
+    val mapSize: Int = 40,
+    val difficulty: Int = 1, // 0 = Easy, 1 = Normal, 2 = Hard
     val unitsBuilt: Int = 0,
     val enemiesDestroyed: Int = 0,
     val timeElapsedMs: Long = 0L,
