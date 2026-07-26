@@ -76,7 +76,8 @@ data class Particle(
 data class GameState(
     val status: GameStatus = GameStatus.PLAYING,
     val mapSize: Int = 40,
-    val difficulty: Int = 1, // 0 = Easy, 1 = Normal, 2 = Hard
+    val difficulty: Int = 1,
+    val playerFaction: String = "BTX",
     val unitsBuilt: Int = 0,
     val enemiesDestroyed: Int = 0,
     val timeElapsedMs: Long = 0L,

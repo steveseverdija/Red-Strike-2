@@ -27,7 +27,7 @@ fun MainMenuScreen(onStartGame: (Int, String, String, Int, Int) -> Unit) {
     var screenState by remember { mutableStateOf(MenuScreenState.MAIN) }
 
     // Lobby State
-    var selectedFaction by remember { mutableStateOf("GDI") }
+    var selectedFaction by remember { mutableStateOf("BTX") }
     var selectedMap by remember { mutableStateOf("Winter") }
     var startingResources by remember { mutableStateOf(5000) }
     var mapSize by remember { mutableStateOf(40) }
@@ -67,7 +67,7 @@ fun MainMenuScreen(onStartGame: (Int, String, String, Int, Int) -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(32.dp))
                     MenuButton("[ CAMPAIGN ]") { /* TODO */ }
-                    MenuButton("[ NEW GAME ]") { screenState = MenuScreenState.LOBBY }
+                    MenuButton("[ QUICKMATCH ]") { screenState = MenuScreenState.LOBBY }
                     MenuButton("[ LOAD GAME ]") { /* TODO */ }
                     MenuButton("[ SETTINGS ]") { screenState = MenuScreenState.SETTINGS }
                     MenuButton("[ EXIT ]") { /* Exit app */ }
@@ -82,8 +82,8 @@ fun MainMenuScreen(onStartGame: (Int, String, String, Int, Int) -> Unit) {
                     
                     Text("> Faction:", color = TextSecondary, fontFamily = FontFamily.Monospace)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ChoiceButton("GDI", selectedFaction == "GDI") { selectedFaction = "GDI" }
-                        ChoiceButton("NOD", selectedFaction == "NOD") { selectedFaction = "NOD" }
+                        ChoiceButton("BTX", selectedFaction == "BTX") { selectedFaction = "BTX" }
+                        ChoiceButton("COM", selectedFaction == "COM") { selectedFaction = "COM" }
                     }
                     
                     Text("> Map:", color = TextSecondary, fontFamily = FontFamily.Monospace)

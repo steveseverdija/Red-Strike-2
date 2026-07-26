@@ -45,7 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.theme.*
 
 @Composable
-fun GameScreen(startingCredits: Int, mapSize: Int = 40, difficulty: Int = 1, onExit: () -> Unit, viewModel: GameViewModel = viewModel()) {
+fun GameScreen(startingCredits: Int, playerFaction: String = "BTX", mapSize: Int = 40, difficulty: Int = 1, onExit: () -> Unit, viewModel: GameViewModel = viewModel()) {
     val state by viewModel.gameState.collectAsState()
     val context = LocalContext.current
     
@@ -72,7 +72,7 @@ fun GameScreen(startingCredits: Int, mapSize: Int = 40, difficulty: Int = 1, onE
     }
 
     LaunchedEffect(Unit) {
-        viewModel.initGame(startingCredits, mapSize, difficulty)
+        viewModel.initGame(startingCredits, playerFaction, mapSize, difficulty)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -157,7 +157,7 @@ fun GameScreen(startingCredits: Int, mapSize: Int = 40, difficulty: Int = 1, onE
     if (state.status != GameStatus.PLAYING) {
         GameOverOverlay(
             state = state,
-            onRematch = { viewModel.initGame(startingCredits, mapSize, difficulty) },
+            onRematch = { viewModel.initGame(startingCredits, playerFaction, mapSize, difficulty) },
             onMainMenu = onExit
         )
     }
@@ -323,7 +323,10 @@ fun GameCanvas(state: GameState) {
                     else -> " [  ] "
                 }
 
-                val baseColor = if (building.isEnemy) AccentRedDark else Color(0xFF1E3A8A)
+                val isCom = state.playerFaction == "COM"
+                val pColor = if (isCom) AccentRedDark else Color(0xFF1E3A8A)
+                val eColor = if (isCom) Color(0xFF1E3A8A) else AccentRedDark
+                val baseColor = if (building.isEnemy) eColor else pColor
                 
                 // Background for readability
                 drawRect(
@@ -350,7 +353,10 @@ fun GameCanvas(state: GameState) {
 
             // Draw Units
             state.units.forEach { unit ->
-                val baseColor = if (unit.isEnemy) AccentRed else Color(0xFF3B82F6)
+                val isCom = state.playerFaction == "COM"
+                val pColor = if (isCom) AccentRed else Color(0xFF3B82F6)
+                val eColor = if (isCom) Color(0xFF3B82F6) else AccentRed
+                val baseColor = if (unit.isEnemy) eColor else pColor
                 
                 val isMoving = unit.targetPosition != null
                 val isAttacking = unit.targetUnitId != null || unit.targetBuildingId != null
@@ -613,7 +619,10 @@ fun MinimapOverlay(
             }
             
             state.buildings.forEach { b ->
-                val color = if (b.isEnemy) AccentRedDark else Color(0xFF3B82F6)
+                val isCom = state.playerFaction == "COM"
+                val pColor = if (isCom) AccentRedDark else Color(0xFF3B82F6)
+                val eColor = if (isCom) Color(0xFF3B82F6) else AccentRedDark
+                val color = if (b.isEnemy) eColor else pColor
                 drawRect(
                     color = color,
                     topLeft = Offset((b.position.x - b.type.width/2) * scale, (b.position.y - b.type.height/2) * scale),
@@ -621,7 +630,10 @@ fun MinimapOverlay(
                 )
             }
             state.units.forEach { u ->
-                val color = if (u.isEnemy) AccentRedDark else AccentGreen
+                val isCom = state.playerFaction == "COM"
+                val pColor = if (isCom) AccentRedDark else Color(0xFF3B82F6)
+                val eColor = if (isCom) Color(0xFF3B82F6) else AccentRedDark
+                val color = if (u.isEnemy) eColor else pColor
                 drawCircle(
                     color = color,
                     radius = maxOf(2f, u.type.radius * scale),

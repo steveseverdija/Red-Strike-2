@@ -22,7 +22,7 @@ class GameViewModel : ViewModel() {
     
     private val MAX_UNITS = 100
 
-    fun initGame(startingCredits: Int, mapSize: Int = 40, difficulty: Int = 1) {
+    fun initGame(startingCredits: Int, playerFaction: String = "BTX", mapSize: Int = 40, difficulty: Int = 1) {
         val newTerrainMap = mutableMapOf<Pair<Int, Int>, TerrainTile>()
         for (x in 0 until mapSize) {
             for (y in 0 until mapSize) {
@@ -55,17 +55,24 @@ class GameViewModel : ViewModel() {
         val eStartY = (mapSize - 10).coerceAtLeast(10)
         for (x in eStartX..(eStartX+8)) for (y in eStartY..(eStartY+8)) newTerrainMap.remove(Pair(x, y))
 
-        _gameState.value = GameState(credits = startingCredits, terrainMap = newTerrainMap, mapSize = mapSize, difficulty = difficulty)
+        _gameState.value = GameState(credits = startingCredits, terrainMap = newTerrainMap, mapSize = mapSize, difficulty = difficulty, playerFaction = playerFaction)
+        
+        val topLeftX = 300f
+        val topLeftY = 300f
+        val botRightX = eStartX * 60f + 100f
+        val botRightY = eStartY * 60f + 100f
+        
+        val pBaseX = if (playerFaction == "COM") botRightX else topLeftX
+        val pBaseY = if (playerFaction == "COM") botRightY else topLeftY
+        val eBaseX = if (playerFaction == "COM") topLeftX else botRightX
+        val eBaseY = if (playerFaction == "COM") topLeftY else botRightY
         
         // Spawn Player Base
-        spawnBuilding(BuildingType.COMMAND, Offset(300f, 300f), false)
-        
-        spawnUnit(UnitType.BUILDER, Offset(350f, 350f), false)
-        spawnUnit(UnitType.HARVESTER, Offset(300f, 400f), false)
+        spawnBuilding(BuildingType.COMMAND, Offset(pBaseX, pBaseY), false)
+        spawnUnit(UnitType.BUILDER, Offset(pBaseX + 50f, pBaseY + 50f), false)
+        spawnUnit(UnitType.HARVESTER, Offset(pBaseX, pBaseY + 100f), false)
 
         // Spawn Enemy Base
-        val eBaseX = eStartX * 60f + 100f
-        val eBaseY = eStartY * 60f + 100f
         spawnBuilding(BuildingType.COMMAND, Offset(eBaseX, eBaseY), true)
         spawnBuilding(BuildingType.FACTORY, Offset(eBaseX - 100f, eBaseY), true)
         spawnUnit(UnitType.BUILDER, Offset(eBaseX - 50f, eBaseY - 50f), true)

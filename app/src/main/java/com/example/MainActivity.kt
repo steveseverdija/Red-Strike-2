@@ -22,7 +22,8 @@ class MainActivity : ComponentActivity() {
         var isPlaying by remember { mutableStateOf(false) }
         var startingCredits by remember { mutableStateOf(5000) }
         var mapSize by remember { mutableStateOf(40) }
-        var difficulty by remember { mutableStateOf(1) } // 0=Easy, 1=Normal, 2=Hard
+        var difficulty by remember { mutableStateOf(1) }
+        var playerFaction by remember { mutableStateOf("BTX") }
         
         if (isPlaying) {
             GameScreen(startingCredits = startingCredits, mapSize = mapSize, difficulty = difficulty, onExit = { isPlaying = false })
